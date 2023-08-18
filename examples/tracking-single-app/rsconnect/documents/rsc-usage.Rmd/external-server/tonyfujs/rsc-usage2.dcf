@@ -1,0 +1,12 @@
+name: rsc-usage2
+title: rsc-usage
+username: tonyfujs
+account: tonyfujs
+server: external-server
+hostUrl: http://w0lxopshyprd1b.worldbank.org:3939/__api__
+appId: 1274
+bundleId: 49550
+url: http://w0lxopshyprd1b.worldbank.org:3939/content/40aff829-da57-4150-b8d2-79457bd1634d/
+version: 1
+asMultiple: FALSE
+asStatic: FALSE

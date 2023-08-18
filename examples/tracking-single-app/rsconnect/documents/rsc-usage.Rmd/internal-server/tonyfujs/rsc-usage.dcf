@@ -1,0 +1,12 @@
+name: rsc-usage
+title: rsc-usage
+username: tonyfujs
+account: tonyfujs
+server: internal-server
+hostUrl: http://w0lxprconn01.worldbank.org:3939/__api__
+appId: 1340
+bundleId: 9747
+url: http://w0lxprconn01.worldbank.org:3939/content/ff5d8543-b6a5-4047-9fe1-d735eb9fe45f/
+version: 1
+asMultiple: FALSE
+asStatic: FALSE
