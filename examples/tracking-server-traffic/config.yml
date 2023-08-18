@@ -1,0 +1,6 @@
+default:
+  server: "connect_server_int"
+  key: "connect_key_int"
+production:
+  server: "CONNECT_SERVER"
+  key: "CONNECT_API_KEY"

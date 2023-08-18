@@ -1,0 +1,12 @@
+name: tracking-server-traffic2
+title: tracking-server-traffic
+username: tonyfujs
+account: tonyfujs
+server: internal-server
+hostUrl: http://w0lxprconn01.worldbank.org:3939/__api__
+appId: 1343
+bundleId: 9751
+url: http://w0lxprconn01.worldbank.org:3939/content/2b863afa-d92e-414b-a95d-3ae931a67cb4/
+version: 1
+asMultiple: FALSE
+asStatic: FALSE

@@ -1,0 +1,229 @@
+---
+title: "Connect server Usage - Last `r as.numeric(params$daysback)` Days"
+output: 
+  flexdashboard::flex_dashboard:
+    orientation: columns
+    vertical_layout: fill
+    css: styles.css
+params:
+  daysback: '365'
+  top_n: 10
+resource_files:
+- config.yml
+---
+```{r setup, include=FALSE}
+library(flexdashboard)
+library(dplyr)
+library(DT)
+library(plotly)
+library(ggplot2)
+library(shiny)
+library(lubridate)
+library(blastula)
+library(prettyunits)
+library(connectapi)
+library(config)
+
+source("themes.R")
+
+# Activate correct configuration
+# "production" for RSConnect deployment or,
+# "default" for local development work
+si <- Sys.info()
+if (si[["user"]] == "rstudio-connect") {
+  Sys.setenv(R_CONFIG_ACTIVE = "production")
+} else {
+  Sys.setenv(R_CONFIG_ACTIVE = "default")
+}
+
+connect_server  <- Sys.getenv(config::get("server"))
+connect_api_key <- Sys.getenv(config::get("key"))
+
+```
+
+```{r fetch-data, include=FALSE}
+days_back <- as.numeric(params$daysback)
+top_n     <- as.numeric(params$top_n)
+
+default_content_title <- "Unknown (Deleted Content?)"
+
+report_from <- lubridate::today() - lubridate::ddays(days_back)
+
+# Modified for local use
+client <- connect(
+  server = connect_server,
+  api_key = connect_api_key
+  )
+shiny <- get_usage_shiny(
+  client,
+  content_guid = params$content_guid,
+  from = report_from,
+  limit = Inf
+) %>%
+  mutate(
+    started = lubridate::ymd_hms(started),
+    ended = lubridate::ymd_hms(ended),
+    session_duration = ended - started
+    ) %>%
+  filter(session_duration > lubridate::dseconds(5))
+content <- get_usage_static(
+  client,
+  from = report_from,
+  limit = Inf
+)
+
+content_info <- get_content(client, guid = params$content_guid)
+
+all_users <- get_users(client, page_size = 500)
+
+data_arr <-   list(shiny = shiny, content = content)
+```
+
+
+Column 
+-----------------------------------------------------------------------
+
+### Top Applications
+
+```{r top_shiny}
+data_arr$shiny %>% 
+  group_by(content_guid) %>% 
+  summarize(visits = n()) %>% 
+  arrange(desc(visits)) %>% 
+  head(top_n) %>% 
+  mutate(name = purrr::map_chr(content_guid, ~ content_title(client, .x, default_content_title))) %>% 
+  {ggplot(., aes(reorder(stringr::str_wrap(name, 30), visits), visits)) + 
+     geom_bar(stat = "identity") +  
+     coord_flip() + 
+     theme_rstudio() + 
+     labs(
+       y = "# of Shiny Sessions",
+       x = NULL
+     )} %>% 
+    ggplotly(tooltip = c("y")) %>% 
+    layout(margin = list(l = 0)) %>%
+    config(displayModeBar = F)
+```
+
+### Top Static Content
+
+```{r top_static}
+data_arr$content %>% 
+  group_by(content_guid) %>% 
+  summarize(visits = n()) %>% 
+  arrange(desc(visits)) %>% 
+  head(top_n) %>%
+  mutate(name = purrr::map_chr(content_guid, ~ content_title(client, .x, default_content_title))) %>% 
+  {ggplot(., aes(reorder(stringr::str_wrap(name, 30), visits), visits)) + 
+     geom_bar(stat = "identity") +  
+     coord_flip() + 
+     theme_rstudio() + 
+     labs(
+       y = "Content Hits",
+       x = NULL
+     )} %>% 
+    ggplotly(tooltip = c("y")) %>% 
+    layout(margin = list(l = 0)) %>%
+    config(displayModeBar = F)
+```
+
+
+
+
+Column 
+-----------------------------------------------------------------------
+
+### Shiny Sessions Over Time
+
+```{r shiny_over_time}
+data_arr$shiny %>%
+    mutate(day = round_date(started, "day")) %>% 
+    filter(day > today() - ddays(days_back)) %>% 
+    group_by(day) %>% 
+    summarise(visits = n()) %>% 
+    arrange(desc(visits)) %>% 
+    {ggplot(., aes(day, visits)) + 
+     geom_point() +
+     geom_smooth(se = FALSE) +
+     theme_rstudio() + 
+     labs(
+       y = "# of Shiny Sessions",
+       x = NULL
+     )} %>% 
+    ggplotly(tooltip = c("y", "day")) %>% 
+    config(displayModeBar = F)
+```
+
+
+### Static Content Visits Over Time (Rmarkdown reports, plots, etc.)
+
+```{r static_over_time}
+data_arr$content %>%
+    mutate(time = ymd_hms(time),
+          day = round_date(time, "day")) %>% 
+    filter(day > today() - ddays(days_back)) %>% 
+    group_by(day) %>% 
+    summarise(visits = n()) %>% 
+    arrange(desc(visits)) %>% 
+    {ggplot(., aes(day, visits)) + 
+     geom_point() +
+     geom_smooth(se = FALSE) +
+     theme_rstudio() + 
+     labs(
+       y = "Content Hits",
+       x = NULL
+     )} %>% 
+    ggplotly(tooltip = c("y", "day")) %>% 
+    config(displayModeBar = F)
+```
+
+Column 
+-----------------------------------------------------------------------
+
+### Shiny Sessions by User (Top 5)
+
+```{r shiny_by_user}
+data_arr$shiny %>%
+    group_by(user_guid) %>% 
+    summarise(visits = n()) %>% 
+    left_join(all_users, by = c(user_guid = "guid")) %>%
+    mutate(username = coalesce(username, "anonymous")) %>%
+    select(username, visits) %>% 
+    arrange(desc(visits)) %>% 
+    head(params$top_n) %>% 
+    {ggplot(., aes(reorder(username, visits), visits)) + 
+     geom_bar(stat = "identity") +  
+     coord_flip() + 
+     theme_rstudio() + 
+     labs(
+       y = "Number of Shiny Sessions",
+       x = NULL
+     )} %>% 
+    ggplotly(tooltip = c("y")) %>% 
+    config(displayModeBar = F)
+```
+
+### Static Content Hits by User (Top 5)
+
+```{r static_by_user}
+data_arr$content %>%
+    group_by(user_guid) %>% 
+    summarise(visits = n()) %>% 
+    left_join(all_users, by = c(user_guid = "guid")) %>%
+    mutate(username = coalesce(username, "anonymous")) %>% 
+    select(username, visits) %>% 
+    arrange(desc(visits)) %>% 
+    head(top_n) %>% 
+    {ggplot(., aes(reorder(username, visits), visits)) + 
+     geom_bar(stat = "identity") +  
+     coord_flip() + 
+     theme_rstudio() +
+     labs(
+       y = "Number of Content Visits",
+       x = NULL
+     )} %>% 
+    ggplotly(tooltip = c("y")) %>% 
+    config(displayModeBar = F)
+```
+
+
